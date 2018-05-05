@@ -14,7 +14,7 @@ from sklearn.metrics import accuracy_score
 from keras import backend as K
 
 from tqdm import tqdm
-
+from collections import Counter
 
 def read_and_resize(filepath, input_shape=(256, 256)):
     im = Image.open((filepath)).convert('RGB')
@@ -35,6 +35,16 @@ def augment(im_array):
 
 def gen(df, batch_size=32, aug=False):
     df = df.sample(frac=1)
+
+    dict_age = {'(0, 2)' : 0,
+                '(4, 6)' : 1,
+                '(8, 12)' : 2,
+                '(15, 20)' : 3,
+                '(25, 32)' : 4,
+                '(38, 43)' : 5,
+                '(48, 53)' : 6,
+                '(60, 100)' : 7}
+
     while True:
         for i, batch in enumerate([df[i:i+batch_size] for i in range(0,df.shape[0],batch_size)]):
             if aug:
@@ -43,7 +53,8 @@ def gen(df, batch_size=32, aug=False):
                 images = np.array([read_and_resize(file_path) for file_path in batch.path.values])
 
 
-            labels = np.array([int(g=="m") for g in batch.gender.values])
+            labels = np.array([dict_age[g] for g in batch.age.values])
+            labels = labels[..., np.newaxis]
 
             yield images, labels
 
@@ -81,12 +92,31 @@ def create_path(df, base_path):
     return df
 def filter_df(df):
 
-    df['f'] = df.gender.apply(lambda x: int(x in ['f', 'm']))
+    dict_age = {'(0, 2)' : 0,
+                '(4, 6)' : 1,
+                '(8, 12)' : 2,
+                '(15, 20)' : 3,
+                '(25, 32)' : 4,
+                '(38, 43)' : 5,
+                '(48, 53)' : 6,
+                '(60, 100)' : 7}
+
+
+    df['f'] = df.age.apply(lambda x: int(x in dict_age))
     df = df[df.f == 1]
     return df
 
 if __name__ == "__main__":
     base_path = "/media/ml/data_ml/face_age_gender/"
+
+    dict_age = {'(0, 2)' : 0,
+                '(4, 6)' : 1,
+                '(8, 12)' : 2,
+                '(15, 20)' : 3,
+                '(25, 32)' : 4,
+                '(38, 43)' : 5,
+                '(48, 53)' : 6,
+                '(60, 100)' : 7}
 
     bag = 3
 
@@ -114,14 +144,14 @@ if __name__ == "__main__":
         predictions = 0
 
         test_images = np.array([read_and_resize(file_path) for file_path in test_df.path.values])
-        test_labels = np.array([int(g == "m") for g in test_df.gender.values])
+        test_labels = np.array([dict_age[a] for a in test_df.age.values])
 
         for k in tqdm(range(bag)):
 
 
             tr_tr, tr_val = train_test_split(train_df, test_size=0.1)
 
-            file_path = "baseline_gender.h5"
+            file_path = "baseline_age.h5"
 
             checkpoint = ModelCheckpoint(file_path, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
 
@@ -131,7 +161,7 @@ if __name__ == "__main__":
 
             callbacks_list = [checkpoint, early, reduce_on_plateau]  # early
 
-            model = get_model(n_classes=1)
+            model = get_model(n_classes=len(dict_age))
             model.fit_generator(gen(tr_tr, aug=True), validation_data=gen(tr_val), epochs=200, verbose=2, workers=4,
                            callbacks=callbacks_list, steps_per_epoch=50, validation_steps=30)
 
@@ -149,7 +179,7 @@ if __name__ == "__main__":
 
         predictions = predictions/cnt_ave
 
-        predictions = (predictions>0.5).astype(np.int8)
+        predictions = predictions.argmax(axis=-1)
 
         acc = accuracy_score(test_labels, predictions)
 
