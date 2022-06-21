@@ -1,6 +1,6 @@
 pandas==0.20.3
 Keras==2.2.4
-numpy==1.16.3
+numpy==1.22.0
 tqdm==4.23.2
 Pillow==6.0.0
 scikit_learn==0.21.1
